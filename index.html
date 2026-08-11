@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Todoリスト</title>
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<link rel="icon" href="icons/icon-512.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Todo">
+<meta name="theme-color" content="#4f46e5">
+<style>
+  :root {
+    --bg: #f4f5f7;
+    --col-bg: #ffffff;
+    --text: #1f2328;
+    --text-muted: #6b7280;
+    --border: #e5e7eb;
+    --accent: #4f46e5;
+    --accent-hover: #4338ca;
+    --danger: #ef4444;
+    --task-bg: #f9fafb;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #17181c;
+      --col-bg: #1c1d22;
+      --text: #e8e8ea;
+      --text-muted: #9a9ba3;
+      --border: #34353b;
+      --accent: #818cf8;
+      --accent-hover: #a5b4fc;
+      --danger: #f87171;
+      --task-bg: #25262c;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    padding: 40px 16px;
+  }
+  h1 {
+    font-size: 22px;
+    margin: 0 0 16px;
+    font-weight: 700;
+    text-align: center;
+  }
+  .toolbar {
+    max-width: 1100px;
+    margin: 0 auto 20px;
+    display: flex;
+    justify-content: center;
+  }
+  #toggle-done {
+    border: 1px solid var(--border);
+    background: var(--col-bg);
+    color: var(--text-muted);
+    font-size: 13px;
+    padding: 6px 14px;
+    border-radius: 999px;
+    cursor: pointer;
+  }
+  #toggle-done:hover { color: var(--accent); border-color: var(--accent); }
+
+  .board {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(220px, 1fr));
+    gap: 16px;
+    max-width: 900px;
+    margin: 0 auto;
+  }
+  @media (max-width: 760px) {
+    .board { grid-template-columns: 1fr; max-width: 480px; }
+  }
+  .column {
+    background: var(--col-bg);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    min-height: 120px;
+  }
+  .column-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+  }
+  .column-title {
+    font-size: 14px;
+    font-weight: 700;
+  }
+  .column-count {
+    font-size: 12px;
+    color: var(--text-muted);
+    background: var(--task-bg);
+    border-radius: 999px;
+    padding: 2px 8px;
+  }
+  .add-form {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 10px;
+  }
+  .add-form input[type="text"] {
+    flex: 1 1 100%;
+    min-width: 0;
+  }
+  .add-form input[type="date"],
+  .add-form select {
+    flex: 1;
+    min-width: 0;
+    font-family: inherit;
+  }
+  .add-form input, .add-form select {
+    padding: 7px 8px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 12px;
+  }
+  .add-form input:focus, .add-form select:focus {
+    outline: 2px solid var(--accent);
+    outline-offset: -1px;
+  }
+  .add-form button {
+    flex: 1 1 100%;
+    padding: 8px 10px;
+    border: none;
+    border-radius: 8px;
+    background: var(--accent);
+    color: white;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .add-form button:hover { background: var(--accent-hover); }
+
+  ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+  li {
+    background: var(--task-bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 10px;
+  }
+  .task-text {
+    font-size: 13px;
+    word-break: break-word;
+    margin-bottom: 6px;
+    display: block;
+  }
+  .done .task-text {
+    color: var(--text-muted);
+    text-decoration: line-through;
+  }
+  .task-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 6px;
+  }
+  .badge {
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .due-label {
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+  .date-group {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex: 1 1 100%;
+  }
+  .date-group input[type="date"] {
+    flex: 1;
+  }
+  .date-group input[type="date"]:disabled {
+    opacity: 0.5;
+  }
+  .none-label {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    font-size: 11px;
+    color: var(--text-muted);
+    white-space: nowrap;
+    cursor: pointer;
+  }
+  .none-label input { accent-color: var(--accent); cursor: pointer; }
+  .task-actions {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .left-actions { display: flex; align-items: center; gap: 6px; }
+  .move-btns { display: flex; gap: 4px; }
+  .move-btns button, .delete-btn, .restore-btn {
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 13px;
+    border-radius: 6px;
+    padding: 2px 6px;
+  }
+  .move-btns button:hover:not(:disabled) {
+    color: var(--accent);
+    background: var(--bg);
+  }
+  .move-btns button:disabled {
+    opacity: 0.25;
+    cursor: default;
+  }
+  .delete-btn:hover { color: var(--danger); background: var(--bg); }
+  .restore-btn:hover { color: var(--accent); background: var(--bg); }
+  .done-checkbox { width: 16px; height: 16px; accent-color: var(--accent); cursor: pointer; }
+
+  .empty {
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 12px;
+    padding: 12px 0;
+  }
+
+  #done-section {
+    max-width: 900px;
+    margin: 20px auto 0;
+    background: var(--col-bg);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px;
+  }
+  #done-section[hidden] { display: none; }
+  #done-section h2 {
+    font-size: 13px;
+    margin: 0 0 10px;
+  }
+</style>
+</head>
+<body>
+<h1>Todoリスト</h1>
+<div class="toolbar">
+  <button id="toggle-done" type="button">完了を表示 (0)</button>
+</div>
+<div class="board" id="board"></div>
+<section id="done-section" hidden>
+  <h2>完了したタスク</h2>
+  <ul id="done-list"></ul>
+  <p class="empty" id="done-empty" hidden>まだ完了したタスクはありません</p>
+</section>
+
+<script>
+  const STORAGE_KEY = "todo-kanban-items";
+
+  const COLUMNS = [
+    { key: "backlog",  title: "未完了" },
+    { key: "today",    title: "今日" },
+    { key: "tomorrow", title: "明日" },
+  ];
+  const VISIBLE_ORDER = COLUMNS.map(c => c.key);
+
+  const CATEGORIES = [
+    { key: "work",     label: "仕事",       emoji: "🔴" },
+    { key: "private",  label: "プライベート", emoji: "🔵" },
+    { key: "family",   label: "家族",       emoji: "🟢" },
+    { key: "shopping", label: "買い物",     emoji: "🟡" },
+  ];
+  const CATEGORY_MAP = Object.fromEntries(CATEGORIES.map(c => [c.key, c]));
+
+  let todos = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
+  let showDone = false;
+
+  function save() {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(todos));
+  }
+
+  function moveTodo(id, direction) {
+    const todo = todos.find(t => t.id === id);
+    if (!todo) return;
+    const idx = VISIBLE_ORDER.indexOf(todo.status);
+    const newIdx = idx + direction;
+    if (newIdx < 0 || newIdx >= VISIBLE_ORDER.length) return;
+    todo.status = VISIBLE_ORDER[newIdx];
+    save();
+    render();
+  }
+
+  function completeTodo(id) {
+    const todo = todos.find(t => t.id === id);
+    if (!todo) return;
+    todo.status = "done";
+    save();
+    render();
+  }
+
+  function restoreTodo(id) {
+    const todo = todos.find(t => t.id === id);
+    if (!todo) return;
+    todo.status = "backlog";
+    save();
+    render();
+  }
+
+  function deleteTodo(id) {
+    todos = todos.filter(t => t.id !== id);
+    save();
+    render();
+  }
+
+  function addTodo(status, text, category, dueDate) {
+    text = text.trim();
+    if (!text) return;
+    todos.push({ id: Date.now() + Math.random(), text, status, category, dueDate: dueDate || "" });
+    save();
+    render();
+  }
+
+  function categorySelect() {
+    const select = document.createElement("select");
+    CATEGORIES.forEach(cat => {
+      const opt = document.createElement("option");
+      opt.value = cat.key;
+      opt.textContent = `${cat.emoji}${cat.label}`;
+      select.appendChild(opt);
+    });
+    return select;
+  }
+
+  function dueLabel(dueDate) {
+    return dueDate ? `期限: ${dueDate}` : "期限: なし";
+  }
+
+  function renderTaskCard(todo, { colIdx } = {}) {
+    const li = document.createElement("li");
+    if (todo.status === "done") li.classList.add("done");
+
+    const textEl = document.createElement("span");
+    textEl.className = "task-text";
+    textEl.textContent = todo.text;
+
+    const meta = document.createElement("div");
+    meta.className = "task-meta";
+    const cat = CATEGORY_MAP[todo.category];
+    if (cat) {
+      const badge = document.createElement("span");
+      badge.className = "badge";
+      badge.textContent = `${cat.emoji}${cat.label}`;
+      meta.appendChild(badge);
+    }
+    const due = document.createElement("span");
+    due.className = "due-label";
+    due.textContent = dueLabel(todo.dueDate);
+    meta.appendChild(due);
+
+    const actions = document.createElement("div");
+    actions.className = "task-actions";
+
+    const leftActions = document.createElement("div");
+    leftActions.className = "left-actions";
+
+    if (todo.status === "done") {
+      const restoreBtn = document.createElement("button");
+      restoreBtn.className = "restore-btn";
+      restoreBtn.type = "button";
+      restoreBtn.textContent = "戻す";
+      restoreBtn.addEventListener("click", () => restoreTodo(todo.id));
+      leftActions.appendChild(restoreBtn);
+    } else {
+      const doneCheckbox = document.createElement("input");
+      doneCheckbox.type = "checkbox";
+      doneCheckbox.className = "done-checkbox";
+      doneCheckbox.title = "完了にする";
+      doneCheckbox.addEventListener("change", () => completeTodo(todo.id));
+      leftActions.appendChild(doneCheckbox);
+
+      const moveBtns = document.createElement("div");
+      moveBtns.className = "move-btns";
+
+      const leftBtn = document.createElement("button");
+      leftBtn.type = "button";
+      leftBtn.textContent = "←";
+      leftBtn.disabled = colIdx === 0;
+      leftBtn.addEventListener("click", () => moveTodo(todo.id, -1));
+
+      const rightBtn = document.createElement("button");
+      rightBtn.type = "button";
+      rightBtn.textContent = "→";
+      rightBtn.disabled = colIdx === VISIBLE_ORDER.length - 1;
+      rightBtn.addEventListener("click", () => moveTodo(todo.id, 1));
+
+      moveBtns.append(leftBtn, rightBtn);
+      leftActions.appendChild(moveBtns);
+    }
+
+    const delBtn = document.createElement("button");
+    delBtn.className = "delete-btn";
+    delBtn.type = "button";
+    delBtn.textContent = "×";
+    delBtn.addEventListener("click", () => deleteTodo(todo.id));
+
+    actions.append(leftActions, delBtn);
+    li.append(textEl, meta, actions);
+    return li;
+  }
+
+  function render() {
+    const board = document.getElementById("board");
+    board.innerHTML = "";
+
+    COLUMNS.forEach((col, colIdx) => {
+      const colEl = document.createElement("div");
+      colEl.className = "column";
+
+      const items = todos.filter(t => t.status === col.key);
+
+      const header = document.createElement("div");
+      header.className = "column-header";
+      header.innerHTML = `<span class="column-title">${col.title}</span><span class="column-count">${items.length}</span>`;
+      colEl.appendChild(header);
+
+      const form = document.createElement("form");
+      form.className = "add-form";
+
+      const input = document.createElement("input");
+      input.type = "text";
+      input.placeholder = "追加...";
+      input.autocomplete = "off";
+
+      const select = categorySelect();
+
+      const hasDueDate = col.key === "backlog";
+      let dateInput, noneCheckbox;
+      if (hasDueDate) {
+        dateInput = document.createElement("input");
+        dateInput.type = "date";
+
+        noneCheckbox = document.createElement("input");
+        noneCheckbox.type = "checkbox";
+        const noneLabel = document.createElement("label");
+        noneLabel.className = "none-label";
+        noneCheckbox.addEventListener("change", () => {
+          dateInput.disabled = noneCheckbox.checked;
+          if (noneCheckbox.checked) dateInput.value = "";
+        });
+        noneLabel.append(noneCheckbox, document.createTextNode("なし"));
+
+        const dateGroup = document.createElement("div");
+        dateGroup.className = "date-group";
+        dateGroup.append(dateInput, noneLabel);
+
+        form.append(input, select, dateGroup);
+      } else {
+        form.append(input, select);
+      }
+
+      const btn = document.createElement("button");
+      btn.type = "submit";
+      btn.textContent = "追加";
+      form.append(btn);
+
+      form.addEventListener("submit", e => {
+        e.preventDefault();
+        const dueDate = hasDueDate && !noneCheckbox.checked ? dateInput.value : "";
+        addTodo(col.key, input.value, select.value, dueDate);
+        input.value = "";
+        if (hasDueDate) {
+          dateInput.value = "";
+          noneCheckbox.checked = false;
+          dateInput.disabled = false;
+        }
+      });
+      colEl.appendChild(form);
+
+      const list = document.createElement("ul");
+      const sortedItems = [...items].sort((a, b) => {
+        if (a.dueDate && b.dueDate) return a.dueDate < b.dueDate ? -1 : a.dueDate > b.dueDate ? 1 : 0;
+        if (a.dueDate && !b.dueDate) return -1;
+        if (!a.dueDate && b.dueDate) return 1;
+        return 0;
+      });
+
+      if (sortedItems.length === 0) {
+        const empty = document.createElement("p");
+        empty.className = "empty";
+        empty.textContent = "なし";
+        colEl.appendChild(empty);
+      } else {
+        sortedItems.forEach(todo => list.appendChild(renderTaskCard(todo, { colIdx })));
+        colEl.appendChild(list);
+      }
+
+      board.appendChild(colEl);
+    });
+
+    const doneItems = todos.filter(t => t.status === "done");
+    document.getElementById("toggle-done").textContent = `完了を表示 (${doneItems.length})`;
+
+    const doneList = document.getElementById("done-list");
+    const doneEmpty = document.getElementById("done-empty");
+    doneList.innerHTML = "";
+    if (doneItems.length === 0) {
+      doneEmpty.hidden = false;
+    } else {
+      doneEmpty.hidden = true;
+      doneItems.forEach(todo => doneList.appendChild(renderTaskCard(todo)));
+    }
+  }
+
+  document.getElementById("toggle-done").addEventListener("click", () => {
+    showDone = !showDone;
+    document.getElementById("done-section").hidden = !showDone;
+  });
+
+  render();
+</script>
+</body>
+</html>
