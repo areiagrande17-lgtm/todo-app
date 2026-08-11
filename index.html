@@ -225,6 +225,14 @@
   .delete-btn:hover { color: var(--danger); background: var(--bg); }
   .restore-btn:hover { color: var(--accent); background: var(--bg); }
   .done-checkbox { width: 16px; height: 16px; accent-color: var(--accent); cursor: pointer; }
+  .carried-badge {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 15%, transparent);
+    border-radius: 999px;
+    padding: 1px 8px;
+  }
 
   .empty {
     text-align: center;
@@ -262,6 +270,8 @@
 
 <script>
   const STORAGE_KEY = "todo-kanban-items";
+  const ROLLOVER_KEY = "todo-kanban-last-rollover-day";
+  const ROLLOVER_HOUR = 5; // 端末のローカル時刻で朝5時に繰り上げ
 
   const COLUMNS = [
     { key: "backlog",  title: "未完了" },
@@ -285,6 +295,39 @@
     localStorage.setItem(STORAGE_KEY, JSON.stringify(todos));
   }
 
+  // 朝5時を境に「その日」の区切りとする基準日文字列(YYYY-MM-DD、端末のローカル時刻基準)を返す
+  function getAppDay(date) {
+    const d = new Date(date);
+    if (d.getHours() < ROLLOVER_HOUR) d.setDate(d.getDate() - 1);
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  }
+
+  // 朝5時を過ぎて日付が変わっていたら「明日」を「今日」へ繰り上げる
+  function checkRollover() {
+    const currentAppDay = getAppDay(new Date());
+    const lastAppDay = localStorage.getItem(ROLLOVER_KEY);
+
+    if (lastAppDay === null) {
+      localStorage.setItem(ROLLOVER_KEY, currentAppDay);
+      return;
+    }
+    if (lastAppDay === currentAppDay) return;
+
+    todos.forEach(todo => {
+      if (todo.status === "today") {
+        todo.carriedOver = true;
+      } else if (todo.status === "tomorrow") {
+        todo.status = "today";
+        todo.carriedOver = false;
+      }
+    });
+    localStorage.setItem(ROLLOVER_KEY, currentAppDay);
+    save();
+  }
+
   function moveTodo(id, direction) {
     const todo = todos.find(t => t.id === id);
     if (!todo) return;
@@ -292,6 +335,7 @@
     const newIdx = idx + direction;
     if (newIdx < 0 || newIdx >= VISIBLE_ORDER.length) return;
     todo.status = VISIBLE_ORDER[newIdx];
+    if (todo.status === "today") todo.carriedOver = false;
     save();
     render();
   }
@@ -321,7 +365,7 @@
   function addTodo(status, text, category, dueDate) {
     text = text.trim();
     if (!text) return;
-    todos.push({ id: Date.now() + Math.random(), text, status, category, dueDate: dueDate || "" });
+    todos.push({ id: Date.now() + Math.random(), text, status, category, dueDate: dueDate || "", carriedOver: false });
     save();
     render();
   }
@@ -363,6 +407,13 @@
     due.textContent = dueLabel(todo.dueDate);
     meta.appendChild(due);
 
+    if (todo.status === "today" && todo.carriedOver) {
+      const carried = document.createElement("span");
+      carried.className = "carried-badge";
+      carried.textContent = "繰り越し";
+      meta.appendChild(carried);
+    }
+
     const actions = document.createElement("div");
     actions.className = "task-actions";
 
@@ -377,12 +428,14 @@
       restoreBtn.addEventListener("click", () => restoreTodo(todo.id));
       leftActions.appendChild(restoreBtn);
     } else {
-      const doneCheckbox = document.createElement("input");
-      doneCheckbox.type = "checkbox";
-      doneCheckbox.className = "done-checkbox";
-      doneCheckbox.title = "完了にする";
-      doneCheckbox.addEventListener("change", () => completeTodo(todo.id));
-      leftActions.appendChild(doneCheckbox);
+      if (todo.status === "backlog") {
+        const doneCheckbox = document.createElement("input");
+        doneCheckbox.type = "checkbox";
+        doneCheckbox.className = "done-checkbox";
+        doneCheckbox.title = "完了にする";
+        doneCheckbox.addEventListener("change", () => completeTodo(todo.id));
+        leftActions.appendChild(doneCheckbox);
+      }
 
       const moveBtns = document.createElement("div");
       moveBtns.className = "move-btns";
@@ -522,7 +575,21 @@
     document.getElementById("done-section").hidden = !showDone;
   });
 
+  checkRollover();
   render();
+
+  // 開いたままでも朝5時をまたいだら繰り上げが反映されるように定期チェック
+  setInterval(() => {
+    checkRollover();
+    render();
+  }, 60 * 1000);
+
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") {
+      checkRollover();
+      render();
+    }
+  });
 </script>
 </body>
 </html>
