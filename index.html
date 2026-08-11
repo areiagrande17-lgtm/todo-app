@@ -172,6 +172,10 @@
     font-size: 12px;
     font-weight: 600;
   }
+  .badge .cat-emoji {
+    font-size: 8px;
+    margin-right: 1px;
+  }
   .due-label {
     font-size: 11px;
     color: var(--text-muted);
@@ -204,8 +208,7 @@
     align-items: center;
   }
   .left-actions { display: flex; align-items: center; gap: 6px; }
-  .move-btns { display: flex; gap: 4px; }
-  .move-btns button, .delete-btn, .restore-btn {
+  .delete-btn, .restore-btn {
     border: none;
     background: transparent;
     color: var(--text-muted);
@@ -213,14 +216,6 @@
     font-size: 13px;
     border-radius: 6px;
     padding: 2px 6px;
-  }
-  .move-btns button:hover:not(:disabled) {
-    color: var(--accent);
-    background: var(--bg);
-  }
-  .move-btns button:disabled {
-    opacity: 0.25;
-    cursor: default;
   }
   .delete-btn:hover { color: var(--danger); background: var(--bg); }
   .restore-btn:hover { color: var(--accent); background: var(--bg); }
@@ -278,7 +273,8 @@
     { key: "today",    title: "今日" },
     { key: "tomorrow", title: "明日" },
   ];
-  const VISIBLE_ORDER = COLUMNS.map(c => c.key);
+
+  const DIARY_TEXT = "日記を書く";
 
   const CATEGORIES = [
     { key: "work",     label: "仕事",       emoji: "🔴" },
@@ -328,16 +324,37 @@
     save();
   }
 
-  function moveTodo(id, direction) {
-    const todo = todos.find(t => t.id === id);
-    if (!todo) return;
-    const idx = VISIBLE_ORDER.indexOf(todo.status);
-    const newIdx = idx + direction;
-    if (newIdx < 0 || newIdx >= VISIBLE_ORDER.length) return;
-    todo.status = VISIBLE_ORDER[newIdx];
-    if (todo.status === "today") todo.carriedOver = false;
-    save();
-    render();
+  function addDaysToAppDay(appDay, days) {
+    const [y, m, d] = appDay.split("-").map(Number);
+    const dt = new Date(y, m - 1, d);
+    dt.setDate(dt.getDate() + days);
+    const yy = dt.getFullYear();
+    const mm = String(dt.getMonth() + 1).padStart(2, "0");
+    const dd = String(dt.getDate()).padStart(2, "0");
+    return `${yy}-${mm}-${dd}`;
+  }
+
+  // 今日・明日の列の一番下に「日記を書く」タスクが毎日1件ずつあるようにする
+  function ensureDailyDiaryTasks() {
+    const currentAppDay = getAppDay(new Date());
+    const nextAppDay = addDaysToAppDay(currentAppDay, 1);
+    let changed = false;
+
+    if (!todos.some(t => t.isDiary && t.status === "today" && t.diaryDate === currentAppDay)) {
+      todos.push({
+        id: Date.now() + Math.random(), text: DIARY_TEXT, status: "today",
+        category: "", dueDate: "", carriedOver: false, isDiary: true, diaryDate: currentAppDay,
+      });
+      changed = true;
+    }
+    if (!todos.some(t => t.isDiary && t.status === "tomorrow" && t.diaryDate === nextAppDay)) {
+      todos.push({
+        id: Date.now() + Math.random(), text: DIARY_TEXT, status: "tomorrow",
+        category: "", dueDate: "", carriedOver: false, isDiary: true, diaryDate: nextAppDay,
+      });
+      changed = true;
+    }
+    if (changed) save();
   }
 
   function completeTodo(id) {
@@ -365,7 +382,7 @@
   function addTodo(status, text, category, dueDate) {
     text = text.trim();
     if (!text) return;
-    todos.push({ id: Date.now() + Math.random(), text, status, category, dueDate: dueDate || "", carriedOver: false });
+    todos.push({ id: Date.now() + Math.random(), text, status, category, dueDate: dueDate || "", carriedOver: false, isDiary: false, diaryDate: null });
     save();
     render();
   }
@@ -385,7 +402,7 @@
     return dueDate ? `期限: ${dueDate}` : "期限: なし";
   }
 
-  function renderTaskCard(todo, { colIdx } = {}) {
+  function renderTaskCard(todo) {
     const li = document.createElement("li");
     if (todo.status === "done") li.classList.add("done");
 
@@ -399,13 +416,19 @@
     if (cat) {
       const badge = document.createElement("span");
       badge.className = "badge";
-      badge.textContent = `${cat.emoji}${cat.label}`;
+      const emojiEl = document.createElement("span");
+      emojiEl.className = "cat-emoji";
+      emojiEl.textContent = cat.emoji;
+      badge.append(emojiEl, document.createTextNode(cat.label));
       meta.appendChild(badge);
     }
-    const due = document.createElement("span");
-    due.className = "due-label";
-    due.textContent = dueLabel(todo.dueDate);
-    meta.appendChild(due);
+
+    if (todo.status === "backlog" || todo.status === "done") {
+      const due = document.createElement("span");
+      due.className = "due-label";
+      due.textContent = dueLabel(todo.dueDate);
+      meta.appendChild(due);
+    }
 
     if (todo.status === "today" && todo.carriedOver) {
       const carried = document.createElement("span");
@@ -428,32 +451,15 @@
       restoreBtn.addEventListener("click", () => restoreTodo(todo.id));
       leftActions.appendChild(restoreBtn);
     } else {
-      if (todo.status === "backlog") {
-        const doneCheckbox = document.createElement("input");
-        doneCheckbox.type = "checkbox";
-        doneCheckbox.className = "done-checkbox";
-        doneCheckbox.title = "完了にする";
-        doneCheckbox.addEventListener("change", () => completeTodo(todo.id));
-        leftActions.appendChild(doneCheckbox);
-      }
-
-      const moveBtns = document.createElement("div");
-      moveBtns.className = "move-btns";
-
-      const leftBtn = document.createElement("button");
-      leftBtn.type = "button";
-      leftBtn.textContent = "←";
-      leftBtn.disabled = colIdx === 0;
-      leftBtn.addEventListener("click", () => moveTodo(todo.id, -1));
-
-      const rightBtn = document.createElement("button");
-      rightBtn.type = "button";
-      rightBtn.textContent = "→";
-      rightBtn.disabled = colIdx === VISIBLE_ORDER.length - 1;
-      rightBtn.addEventListener("click", () => moveTodo(todo.id, 1));
-
-      moveBtns.append(leftBtn, rightBtn);
-      leftActions.appendChild(moveBtns);
+      const doneCheckbox = document.createElement("input");
+      doneCheckbox.type = "checkbox";
+      doneCheckbox.className = "done-checkbox";
+      doneCheckbox.title = "完了";
+      doneCheckbox.addEventListener("change", () => {
+        if (todo.status === "backlog") completeTodo(todo.id);
+        else deleteTodo(todo.id);
+      });
+      leftActions.appendChild(doneCheckbox);
     }
 
     const delBtn = document.createElement("button");
@@ -537,9 +543,10 @@
 
       const list = document.createElement("ul");
       const sortedItems = [...items].sort((a, b) => {
-        if (a.dueDate && b.dueDate) return a.dueDate < b.dueDate ? -1 : a.dueDate > b.dueDate ? 1 : 0;
-        if (a.dueDate && !b.dueDate) return -1;
-        if (!a.dueDate && b.dueDate) return 1;
+        const rank = t => (t.dueDate ? 0 : t.isDiary ? 2 : 1);
+        const ra = rank(a), rb = rank(b);
+        if (ra !== rb) return ra - rb;
+        if (ra === 0) return a.dueDate < b.dueDate ? -1 : a.dueDate > b.dueDate ? 1 : 0;
         return 0;
       });
 
@@ -549,7 +556,7 @@
         empty.textContent = "なし";
         colEl.appendChild(empty);
       } else {
-        sortedItems.forEach(todo => list.appendChild(renderTaskCard(todo, { colIdx })));
+        sortedItems.forEach(todo => list.appendChild(renderTaskCard(todo)));
         colEl.appendChild(list);
       }
 
@@ -576,17 +583,20 @@
   });
 
   checkRollover();
+  ensureDailyDiaryTasks();
   render();
 
   // 開いたままでも朝5時をまたいだら繰り上げが反映されるように定期チェック
   setInterval(() => {
     checkRollover();
+    ensureDailyDiaryTasks();
     render();
   }, 60 * 1000);
 
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible") {
       checkRollover();
+      ensureDailyDiaryTasks();
       render();
     }
   });
