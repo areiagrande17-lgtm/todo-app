@@ -151,15 +151,79 @@
     border-radius: 8px;
     padding: 8px 10px;
   }
-  .task-text {
-    font-size: 13px;
-    word-break: break-word;
+  .task-title-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
     margin-bottom: 6px;
-    display: block;
+    cursor: pointer;
+  }
+  .chevron-btn {
+    flex-shrink: 0;
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 10px;
+    padding: 2px;
+  }
+  .task-text {
+    flex: 1;
+    font-size: 13px;
+    font-weight: 700;
+    word-break: break-word;
   }
   .done .task-text {
     color: var(--text-muted);
     text-decoration: line-through;
+  }
+  .title-input {
+    flex: 1;
+    font-size: 13px;
+    font-weight: 700;
+    font-family: inherit;
+    color: var(--text);
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid var(--border);
+    padding: 2px 0;
+  }
+  .title-input:focus {
+    outline: none;
+    border-color: var(--accent);
+  }
+  .memo-icon {
+    font-size: 11px;
+    opacity: 0.6;
+  }
+  .expanded-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 6px;
+    padding-top: 6px;
+    border-top: 1px dashed var(--border);
+  }
+  .expanded-panel label {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+  .expanded-panel select,
+  .expanded-panel textarea {
+    font-family: inherit;
+    font-size: 12px;
+    padding: 6px 8px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--bg);
+    color: var(--text);
+  }
+  .expanded-panel textarea {
+    resize: vertical;
+    min-height: 50px;
   }
   .task-meta {
     display: flex;
@@ -286,9 +350,23 @@
 
   let todos = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
   let showDone = false;
+  const expandedIds = new Set();
 
   function save() {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(todos));
+  }
+
+  function updateTodo(id, changes) {
+    const todo = todos.find(t => t.id === id);
+    if (!todo) return;
+    Object.assign(todo, changes);
+    save();
+  }
+
+  function toggleExpand(id) {
+    if (expandedIds.has(id)) expandedIds.delete(id);
+    else expandedIds.add(id);
+    render();
   }
 
   // 朝5時を境に「その日」の区切りとする基準日文字列(YYYY-MM-DD、端末のローカル時刻基準)を返す
@@ -343,14 +421,14 @@
     if (!todos.some(t => t.isDiary && t.status === "today" && t.diaryDate === currentAppDay)) {
       todos.push({
         id: Date.now() + Math.random(), text: DIARY_TEXT, status: "today",
-        category: "", dueDate: "", carriedOver: false, isDiary: true, diaryDate: currentAppDay,
+        category: "", dueDate: "", memo: "", carriedOver: false, isDiary: true, diaryDate: currentAppDay,
       });
       changed = true;
     }
     if (!todos.some(t => t.isDiary && t.status === "tomorrow" && t.diaryDate === nextAppDay)) {
       todos.push({
         id: Date.now() + Math.random(), text: DIARY_TEXT, status: "tomorrow",
-        category: "", dueDate: "", carriedOver: false, isDiary: true, diaryDate: nextAppDay,
+        category: "", dueDate: "", memo: "", carriedOver: false, isDiary: true, diaryDate: nextAppDay,
       });
       changed = true;
     }
@@ -382,13 +460,17 @@
   function addTodo(status, text, category, dueDate) {
     text = text.trim();
     if (!text) return;
-    todos.push({ id: Date.now() + Math.random(), text, status, category, dueDate: dueDate || "", carriedOver: false, isDiary: false, diaryDate: null });
+    todos.push({ id: Date.now() + Math.random(), text, status, category, dueDate: dueDate || "", memo: "", carriedOver: false, isDiary: false, diaryDate: null });
     save();
     render();
   }
 
   function categorySelect() {
     const select = document.createElement("select");
+    const noneOpt = document.createElement("option");
+    noneOpt.value = "";
+    noneOpt.textContent = "未設定";
+    select.appendChild(noneOpt);
     CATEGORIES.forEach(cat => {
       const opt = document.createElement("option");
       opt.value = cat.key;
@@ -406,22 +488,38 @@
     const li = document.createElement("li");
     if (todo.status === "done") li.classList.add("done");
 
-    const textEl = document.createElement("span");
-    textEl.className = "task-text";
-    textEl.textContent = todo.text;
+    const expanded = expandedIds.has(todo.id);
+
+    const titleRow = document.createElement("div");
+    titleRow.className = "task-title-row";
+
+    const chevron = document.createElement("button");
+    chevron.type = "button";
+    chevron.className = "chevron-btn";
+    chevron.textContent = expanded ? "▾" : "▸";
+    chevron.addEventListener("click", () => toggleExpand(todo.id));
+    titleRow.appendChild(chevron);
+
+    if (expanded) {
+      const titleInput = document.createElement("input");
+      titleInput.type = "text";
+      titleInput.className = "title-input";
+      titleInput.value = todo.text;
+      titleInput.addEventListener("blur", () => {
+        const v = titleInput.value.trim();
+        if (v) updateTodo(todo.id, { text: v });
+      });
+      titleRow.appendChild(titleInput);
+    } else {
+      const textEl = document.createElement("span");
+      textEl.className = "task-text";
+      textEl.textContent = todo.text;
+      titleRow.addEventListener("click", () => toggleExpand(todo.id));
+      titleRow.appendChild(textEl);
+    }
 
     const meta = document.createElement("div");
     meta.className = "task-meta";
-    const cat = CATEGORY_MAP[todo.category];
-    if (cat) {
-      const badge = document.createElement("span");
-      badge.className = "badge";
-      const emojiEl = document.createElement("span");
-      emojiEl.className = "cat-emoji";
-      emojiEl.textContent = cat.emoji;
-      badge.append(emojiEl, document.createTextNode(cat.label));
-      meta.appendChild(badge);
-    }
 
     if (todo.status === "backlog" || todo.status === "done") {
       const due = document.createElement("span");
@@ -435,6 +533,37 @@
       carried.className = "carried-badge";
       carried.textContent = "繰り越し";
       meta.appendChild(carried);
+    }
+
+    if (todo.memo) {
+      const memoIcon = document.createElement("span");
+      memoIcon.className = "memo-icon";
+      memoIcon.textContent = "📝";
+      memoIcon.title = "メモあり";
+      meta.appendChild(memoIcon);
+    }
+
+    let expandedPanel = null;
+    if (expanded) {
+      expandedPanel = document.createElement("div");
+      expandedPanel.className = "expanded-panel";
+
+      const catLabel = document.createElement("label");
+      catLabel.textContent = "カテゴリ";
+      const catSelect = categorySelect();
+      catSelect.value = todo.category || "";
+      catSelect.addEventListener("change", () => updateTodo(todo.id, { category: catSelect.value }));
+      catLabel.appendChild(catSelect);
+      expandedPanel.appendChild(catLabel);
+
+      const memoLabel = document.createElement("label");
+      memoLabel.textContent = "メモ";
+      const memoInput = document.createElement("textarea");
+      memoInput.placeholder = "メモを入力...";
+      memoInput.value = todo.memo || "";
+      memoInput.addEventListener("blur", () => updateTodo(todo.id, { memo: memoInput.value }));
+      memoLabel.appendChild(memoInput);
+      expandedPanel.appendChild(memoLabel);
     }
 
     const actions = document.createElement("div");
@@ -469,7 +598,9 @@
     delBtn.addEventListener("click", () => deleteTodo(todo.id));
 
     actions.append(leftActions, delBtn);
-    li.append(textEl, meta, actions);
+    li.append(titleRow, meta);
+    if (expandedPanel) li.appendChild(expandedPanel);
+    li.appendChild(actions);
     return li;
   }
 
