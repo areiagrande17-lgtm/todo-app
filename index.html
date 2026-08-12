@@ -338,8 +338,6 @@
     { key: "tomorrow", title: "明日" },
   ];
 
-  const DIARY_TEXT = "日記を書く";
-
   const CATEGORIES = [
     { key: "work",     label: "仕事",       emoji: "🔴" },
     { key: "private",  label: "プライベート", emoji: "🔵" },
@@ -349,6 +347,10 @@
   const CATEGORY_MAP = Object.fromEntries(CATEGORIES.map(c => [c.key, c]));
 
   let todos = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
+  if (todos.some(t => t.isDiary)) {
+    todos = todos.filter(t => !t.isDiary);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(todos));
+  }
   let showDone = false;
   const expandedIds = new Set();
 
@@ -402,39 +404,6 @@
     save();
   }
 
-  function addDaysToAppDay(appDay, days) {
-    const [y, m, d] = appDay.split("-").map(Number);
-    const dt = new Date(y, m - 1, d);
-    dt.setDate(dt.getDate() + days);
-    const yy = dt.getFullYear();
-    const mm = String(dt.getMonth() + 1).padStart(2, "0");
-    const dd = String(dt.getDate()).padStart(2, "0");
-    return `${yy}-${mm}-${dd}`;
-  }
-
-  // 今日・明日の列の一番下に「日記を書く」タスクが毎日1件ずつあるようにする
-  function ensureDailyDiaryTasks() {
-    const currentAppDay = getAppDay(new Date());
-    const nextAppDay = addDaysToAppDay(currentAppDay, 1);
-    let changed = false;
-
-    if (!todos.some(t => t.isDiary && t.status === "today" && t.diaryDate === currentAppDay)) {
-      todos.push({
-        id: Date.now() + Math.random(), text: DIARY_TEXT, status: "today",
-        category: "", dueDate: "", memo: "", carriedOver: false, isDiary: true, diaryDate: currentAppDay,
-      });
-      changed = true;
-    }
-    if (!todos.some(t => t.isDiary && t.status === "tomorrow" && t.diaryDate === nextAppDay)) {
-      todos.push({
-        id: Date.now() + Math.random(), text: DIARY_TEXT, status: "tomorrow",
-        category: "", dueDate: "", memo: "", carriedOver: false, isDiary: true, diaryDate: nextAppDay,
-      });
-      changed = true;
-    }
-    if (changed) save();
-  }
-
   function completeTodo(id) {
     const todo = todos.find(t => t.id === id);
     if (!todo) return;
@@ -460,7 +429,7 @@
   function addTodo(status, text, category, dueDate) {
     text = text.trim();
     if (!text) return;
-    todos.push({ id: Date.now() + Math.random(), text, status, category, dueDate: dueDate || "", memo: "", carriedOver: false, isDiary: false, diaryDate: null });
+    todos.push({ id: Date.now() + Math.random(), text, status, category, dueDate: dueDate || "", memo: "", carriedOver: false });
     save();
     render();
   }
@@ -674,10 +643,9 @@
 
       const list = document.createElement("ul");
       const sortedItems = [...items].sort((a, b) => {
-        const rank = t => (t.dueDate ? 0 : t.isDiary ? 2 : 1);
-        const ra = rank(a), rb = rank(b);
-        if (ra !== rb) return ra - rb;
-        if (ra === 0) return a.dueDate < b.dueDate ? -1 : a.dueDate > b.dueDate ? 1 : 0;
+        if (a.dueDate && b.dueDate) return a.dueDate < b.dueDate ? -1 : a.dueDate > b.dueDate ? 1 : 0;
+        if (a.dueDate && !b.dueDate) return -1;
+        if (!a.dueDate && b.dueDate) return 1;
         return 0;
       });
 
@@ -714,20 +682,17 @@
   });
 
   checkRollover();
-  ensureDailyDiaryTasks();
   render();
 
   // 開いたままでも朝5時をまたいだら繰り上げが反映されるように定期チェック
   setInterval(() => {
     checkRollover();
-    ensureDailyDiaryTasks();
     render();
   }, 60 * 1000);
 
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible") {
       checkRollover();
-      ensureDailyDiaryTasks();
       render();
     }
   });
